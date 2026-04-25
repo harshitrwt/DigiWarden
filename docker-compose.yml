@@ -1,0 +1,27 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      STORAGE_PATH: /data
+      DB_URL: sqlite:////data/contentgenome.db
+    volumes:
+      - backend_data:/data
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000/api
+    depends_on:
+      - backend
+
+volumes:
+  backend_data:
+

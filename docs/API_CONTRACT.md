@@ -114,3 +114,34 @@ None
   }
 }
 ```
+
+---
+
+## MVP Notes / Extra Endpoints (Backend Convenience)
+These endpoints exist so the frontend can be built incrementally and the backend can be tested end-to-end today.
+
+### Image metadata
+**Endpoint:** `GET /api/images/{image_id}`
+
+### Job status (polling helper)
+**Endpoint:** `GET /api/images/{image_id}/status`
+
+### Upload a known variant (user-provided candidate)
+**Endpoint:** `POST /api/images/{root_image_id}/variants` (multipart/form-data: `file`)
+
+### List variants for a root image
+**Endpoint:** `GET /api/images/{root_image_id}/variants`
+
+### Raw fingerprint summary (debug)
+**Endpoint:** `GET /api/fingerprint/{image_id}`
+
+### Similarity matches list (debug / future UI)
+**Endpoint:** `GET /api/similarity/{image_id}`
+
+### Tree node detail (debug / future UI)
+**Endpoint:** `GET /api/tree/{image_id}/node/{node_id}`
+
+### LLM explanation placeholder
+**Endpoint:** `POST /api/explain/{image_id}/node`
+
+This currently returns a deterministic placeholder string until an LLM provider is wired.
