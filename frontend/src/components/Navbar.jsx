@@ -39,7 +39,7 @@ export default function Navbar({ page, navigate, hasAsset }) {
           </div>
           <div>
             <span style={{ fontWeight: 700, fontSize: 16, color: '#fff', letterSpacing: '-0.02em' }}>
-              Digi<span style={{ color: 'var(--orange)' }}>Warden</span>
+              Digi<span style={{ color: 'var(--orange)' }}>Patron</span>
             </span>
             <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: 'var(--text3)', marginLeft: 6 }}>v2</span>
           </div>
@@ -84,7 +84,7 @@ export default function Navbar({ page, navigate, hasAsset }) {
         onMouseEnter={e => { e.currentTarget.style.background = 'var(--orange2)'; e.currentTarget.style.transform = 'translateY(-1px)' }}
         onMouseLeave={e => { e.currentTarget.style.background = 'var(--orange)'; e.currentTarget.style.transform = 'none' }}
         >
-          Request Demo
+          Open Workflow
         </button>
       </div>
     </nav>

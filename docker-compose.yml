@@ -8,6 +8,8 @@ services:
     environment:
       STORAGE_PATH: /data
       DB_URL: sqlite:////data/contentgenome.db
+      ENABLE_DEMO_VARIANTS: "false"
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173
     volumes:
       - backend_data:/data
 
@@ -16,12 +18,9 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     ports:
-      - "5173:5173"
-    environment:
-      VITE_API_BASE_URL: http://localhost:8000/api
+      - "5173:80"
     depends_on:
       - backend
 
 volumes:
   backend_data:
-

@@ -20,7 +20,7 @@ function DashboardMockup() {
       <div style={{ background: '#1A1A1A', padding: '10px 16px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 6, alignItems: 'center' }}>
         {['#FF5F57','#FEBC2E','#28C840'].map(c => <div key={c} style={{ width: 10, height: 10, borderRadius: '50%', background: c }} />)}
         <div style={{ flex: 1, marginLeft: 10, background: 'rgba(255,255,255,0.06)', borderRadius: 4, padding: '3px 12px', fontSize: 11, color: 'var(--text3)', fontFamily: 'JetBrains Mono,monospace' }}>
-          digiwarden.app/dashboard
+          digipatron.app/dashboard
         </div>
       </div>
 
@@ -28,7 +28,7 @@ function DashboardMockup() {
       <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: 0 }}>
         {/* Sidebar */}
         <div style={{ background: '#0F0F0F', borderRight: '1px solid var(--border)', padding: '16px 12px', fontSize: 12 }}>
-          <div style={{ color: 'var(--orange)', fontWeight: 700, marginBottom: 16, fontSize: 13 }}>DigiWarden</div>
+          <div style={{ color: 'var(--orange)', fontWeight: 700, marginBottom: 16, fontSize: 13 }}>DigiPatron</div>
           {['Dashboard','Products','Analyze','Done','Settings'].map((item, i) => (
             <div key={item} style={{
               padding: '7px 10px', borderRadius: 6, marginBottom: 2,

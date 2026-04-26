@@ -4,6 +4,12 @@ import os
 from pathlib import Path
 
 
+def _is_truthy(raw: str | None, default: bool = False) -> bool:
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def get_storage_path() -> Path:
     """
     Local filesystem storage for the MVP (S3/GCS/Firebase Storage can be added later).
@@ -30,3 +36,24 @@ def get_db_url() -> str:
     # Default to a SQLite DB colocated with the backend's data folder.
     default_db_path = get_storage_path() / "contentgenome.db"
     return os.getenv("DB_URL", f"sqlite:///{default_db_path.as_posix()}")
+
+
+def get_cors_origins() -> list[str]:
+    raw = os.getenv("CORS_ORIGINS")
+    if raw:
+        origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
+        if origins:
+            return origins
+
+    return [
+        "http://localhost",
+        "http://127.0.0.1",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+
+
+def demo_variants_enabled() -> bool:
+    return _is_truthy(os.getenv("ENABLE_DEMO_VARIANTS"), default=False)

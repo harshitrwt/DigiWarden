@@ -31,6 +31,14 @@ def build_propagation_dag(
             "authenticity_label": "Original",
             "similarity_score": 100,
             "mutation_type": "None",
+            "filename": None,
+            "created_at": None,
+            "breakdown": {
+                "phash_score": 100.0,
+                "orb_score": 100.0,
+                "semantic_score": 100.0,
+            },
+            "source_kind": "root_upload",
         }
     ]
     edges: List[Dict[str, Any]] = []
@@ -49,6 +57,10 @@ def build_propagation_dag(
                 "authenticity_label": cand.get("authenticity_label") or "No Match",
                 "similarity_score": float(cand.get("similarity_score", 0.0)),
                 "mutation_type": cand.get("mutation_type") or "Unknown",
+                "filename": cand.get("filename"),
+                "created_at": cand.get("created_at"),
+                "breakdown": cand.get("breakdown"),
+                "source_kind": cand.get("source_kind"),
             }
         )
         edges.append(

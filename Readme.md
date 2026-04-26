@@ -1,37 +1,43 @@
-# DigiPatron (ContentGenome MVP)
+# DigiPatron
 
-This repo is a 3-layer MVP:
+DigiPatron reconstructs the lifecycle of digital media so teams can fingerprint an original asset, compare it against known copies, visualize propagation, and generate DMCA notices from the resulting evidence.
 
-- `frontend/` (React/Vite) — currently a simple demo UI (placeholders for TreeViz, ScoreCards, DMCA modal).
-- `backend/` (FastAPI) — orchestrates storage + analysis + DMCA drafting.
-- `engine/` (pure Python) — fingerprints + similarity + (MVP) propagation tree builder.
+## Stack
+- **Backend:** FastAPI + SQLAlchemy
+- **Frontend:** React + Vite + D3
+- **Engine:** pHash + ORB with optional semantic embeddings
 
-## Run locally (Windows / PowerShell)
+## Local Development
 
-### 1) Backend
-```powershell
-cd DigiPatron\backend
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+### Backend
+```bash
+cd backend
 pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
-Open `http://localhost:8000/docs`.
 
-### 2) Frontend (optional demo)
-```powershell
-cd DigiPatron\frontend
+### Frontend
+```bash
+cd frontend
 npm install
-$env:VITE_API_BASE_URL="http://localhost:8000/api"
 npm run dev
 ```
-Open `http://localhost:5173`.
 
-## Run with Docker
-```powershell
-cd DigiPatron
+The Vite dev server proxies `/api` and `/assets` to `http://localhost:8000` by default.
+
+## Workflow
+1. Upload the original image.
+2. Optionally upload candidate copies to compare against the original.
+3. Trigger analysis and poll the live backend job status.
+4. Inspect the dashboard, similarity report, propagation tree, and DMCA notice draft.
+
+## Docker
+```bash
 docker compose up --build
 ```
 
-## API Contract
-See `docs/API_CONTRACT.md`.
+Services:
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:8000`
+
+By default Docker runs with `ENABLE_DEMO_VARIANTS=false`, so the system only analyzes real uploaded variants unless you explicitly enable demo data.

@@ -49,6 +49,10 @@ class TreeNode(BaseModel):
     authenticity_label: str
     similarity_score: float
     mutation_type: str
+    filename: Optional[str] = None
+    created_at: Optional[datetime] = None
+    breakdown: Optional[Dict[str, Any]] = None
+    source_kind: Optional[str] = None
 
 
 class TreeEdge(BaseModel):
@@ -135,6 +139,10 @@ class SimilarityMatch(BaseModel):
     authenticity_label: str
     similarity_score: float
     breakdown: Dict[str, Any]
+    node_id: Optional[str] = None
+    filename: Optional[str] = None
+    created_at: Optional[datetime] = None
+    source_kind: Optional[str] = None
 
 
 class SimilarityResponseData(BaseModel):

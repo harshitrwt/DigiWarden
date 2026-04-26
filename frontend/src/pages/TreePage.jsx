@@ -1,255 +1,477 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
-import { LayoutDashboard, Shield, AlertTriangle, GitBranch, FileText, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
+import { AlertTriangle, FileText, GitBranch, LayoutDashboard, Maximize2, Shield, ZoomIn, ZoomOut } from 'lucide-react'
 import NodeDetailPanel from '../components/NodeDetailPanel'
 import DMCAModal from '../components/DMCAModal'
-import { MOCK_TREE } from '../mock/fixtures'
+import { fetchNodeExplanation, formatRelativeTime, getDisplayLabel } from '../hooks/useApi'
 
-const NC = {
-  Original:   { fill:'#22C55E', stroke:'#16A34A', glow:'rgba(34,197,94,0.5)'  },
-  Modified:   { fill:'#FF6B1A', stroke:'#E05A10', glow:'rgba(255,107,26,0.5)' },
-  Infringing: { fill:'#FF3B5C', stroke:'#CC2E4A', glow:'rgba(255,59,92,0.5)'  },
+const NODE_COLORS = {
+  Original: { fill: '#22C55E', stroke: '#16A34A', glow: 'rgba(34,197,94,0.5)' },
+  Modified: { fill: '#FF6B1A', stroke: '#E05A10', glow: 'rgba(255,107,26,0.5)' },
+  Infringing: { fill: '#FF3B5C', stroke: '#CC2E4A', glow: 'rgba(255,59,92,0.5)' },
+  Unmatched: { fill: '#999999', stroke: '#777777', glow: 'rgba(153,153,153,0.35)' },
 }
 
-export default function TreePage({ navigate }) {
-  const svgRef = useRef()
-  const gRef   = useRef()
-  const [selected, setSelected] = useState(null)
-  const [dmcaNode, setDmcaNode]= useState(null)
-  const [built, setBuilt]      = useState(false)
-  const zoomRef = useRef()
+function score(value) {
+  return Math.round(Number(value) || 0)
+}
 
-  useEffect(()=>{
-    const el = svgRef.current.parentElement
-    const W = el.clientWidth || 1000, H = 580
+function shortLabel(value, maxLength = 18) {
+  if (!value) {
+    return 'Unknown'
+  }
+  if (value.length <= maxLength) {
+    return value
+  }
+  return `${value.slice(0, maxLength - 3)}...`
+}
+
+function buildHierarchy(treeData) {
+  if (!treeData?.nodes?.length) {
+    return null
+  }
+
+  const parentById = new Map(treeData.edges.map((edge) => [edge.target, edge.source]))
+  return d3
+    .stratify()
+    .id((node) => node.id)
+    .parentId((node) => parentById.get(node.id) || null)(treeData.nodes)
+}
+
+function mapTreeNode(node) {
+  const type = getDisplayLabel(node.authenticity_label)
+  return {
+    ...node,
+    type,
+    displayName: node.id === 'node-0' ? 'Original asset' : node.filename || node.image_id,
+    sourceLabel:
+      node.source_kind === 'demo'
+        ? 'Demo variant'
+        : node.source_kind === 'user_upload'
+          ? 'Uploaded variant'
+          : 'Registered upload',
+    transformation: node.mutation_type || 'Unknown',
+    similarity: score(node.similarity_score),
+    time: node.id === 'node-0' ? 'Registered asset' : formatRelativeTime(node.created_at),
+    scores: {
+      phash: node.breakdown?.phash_score ?? 0,
+      orb: node.breakdown?.orb_score ?? 0,
+      clip: node.breakdown?.semantic_score ?? 0,
+      combined: node.similarity_score ?? 0,
+    },
+  }
+}
+
+export default function TreePage({ workflow, navigate }) {
+  const svgRef = useRef(null)
+  const zoomRef = useRef(null)
+  const [selectedNodeId, setSelectedNodeId] = useState(null)
+  const [dmcaNode, setDmcaNode] = useState(null)
+  const [explanations, setExplanations] = useState({})
+  const [loadingExplanationId, setLoadingExplanationId] = useState(null)
+  const [explanationErrors, setExplanationErrors] = useState({})
+
+  const imageId = workflow?.analysis?.image_id
+  const treeData = workflow?.tree
+
+  const hierarchy = useMemo(() => buildHierarchy(treeData), [treeData])
+  const nodes = useMemo(() => (treeData?.nodes || []).map(mapTreeNode), [treeData])
+  const nodesById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])
+  const selectedNode = selectedNodeId ? nodesById.get(selectedNodeId) : null
+
+  useEffect(() => {
+    if (!selectedNodeId || !imageId) {
+      return
+    }
+
+    if (explanations[selectedNodeId] || loadingExplanationId === selectedNodeId || explanationErrors[selectedNodeId]) {
+      return
+    }
+
+    let cancelled = false
+    setLoadingExplanationId(selectedNodeId)
+    fetchNodeExplanation(imageId, selectedNodeId)
+      .then((explanation) => {
+        if (!cancelled) {
+          setExplanations((current) => ({ ...current, [selectedNodeId]: explanation }))
+          setExplanationErrors((current) => {
+            const next = { ...current }
+            delete next[selectedNodeId]
+            return next
+          })
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setExplanationErrors((current) => ({
+            ...current,
+            [selectedNodeId]: error instanceof Error ? error.message : 'Unable to load a node explanation.',
+          }))
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingExplanationId(null)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedNodeId, imageId, explanations, loadingExplanationId, explanationErrors])
+
+  useEffect(() => {
+    if (!hierarchy || !svgRef.current) {
+      return
+    }
+
+    const container = svgRef.current.parentElement
+    const width = container?.clientWidth || 1000
+    const height = Math.max(580, hierarchy.descendants().length * 90)
+    const root = hierarchy.copy()
+    const layout = d3.tree().size([height - 120, Math.max(320, width - 260)])
+    layout(root)
+
     const svg = d3.select(svgRef.current)
+    svg.selectAll('*').interrupt()
     svg.selectAll('*').remove()
-    svg.attr('width',W).attr('height',H)
+    svg.attr('width', width).attr('height', height)
 
-    // Defs
     const defs = svg.append('defs')
-    // Dot bg pattern
-    defs.append('pattern').attr('id','dotgrid').attr('width',32).attr('height',32).attr('patternUnits','userSpaceOnUse')
-      .append('circle').attr('cx',1).attr('cy',1).attr('r',1).attr('fill','rgba(255,107,26,0.08)')
-    // Glow filters
-    Object.entries(NC).forEach(([type,c])=>{
-      const f = defs.append('filter').attr('id','glow-'+type).attr('x','-100%').attr('y','-100%').attr('width','300%').attr('height','300%')
-      f.append('feGaussianBlur').attr('stdDeviation',5).attr('result','blur')
-      const m = f.append('feMerge'); m.append('feMergeNode').attr('in','blur'); m.append('feMergeNode').attr('in','SourceGraphic')
-      // Radial gradient per type
-      const rg = defs.append('radialGradient').attr('id','grad-'+type)
-      rg.append('stop').attr('offset','0%').attr('stop-color',c.fill).attr('stop-opacity',1)
-      rg.append('stop').attr('offset','100%').attr('stop-color',c.stroke).attr('stop-opacity',0.85)
+    defs
+      .append('pattern')
+      .attr('id', 'dotgrid')
+      .attr('width', 32)
+      .attr('height', 32)
+      .attr('patternUnits', 'userSpaceOnUse')
+      .append('circle')
+      .attr('cx', 1)
+      .attr('cy', 1)
+      .attr('r', 1)
+      .attr('fill', 'rgba(255,107,26,0.08)')
+
+    Object.entries(NODE_COLORS).forEach(([type, colors]) => {
+      const filter = defs.append('filter').attr('id', `glow-${type}`).attr('x', '-100%').attr('y', '-100%').attr('width', '300%').attr('height', '300%')
+      filter.append('feGaussianBlur').attr('stdDeviation', 5).attr('result', 'blur')
+      const merge = filter.append('feMerge')
+      merge.append('feMergeNode').attr('in', 'blur')
+      merge.append('feMergeNode').attr('in', 'SourceGraphic')
+
+      const gradient = defs.append('radialGradient').attr('id', `grad-${type}`)
+      gradient.append('stop').attr('offset', '0%').attr('stop-color', colors.fill).attr('stop-opacity', 1)
+      gradient.append('stop').attr('offset', '100%').attr('stop-color', colors.stroke).attr('stop-opacity', 0.85)
     })
-    // Arrow marker
-    defs.append('marker').attr('id','arrow').attr('viewBox','0 0 8 8').attr('refX',6).attr('refY',4)
-      .attr('markerWidth',6).attr('markerHeight',6).attr('orient','auto')
-      .append('path').attr('d','M0,0 L0,8 L8,4 z').attr('fill','rgba(255,107,26,0.4)')
 
-    // Background
-    svg.append('rect').attr('width',W).attr('height',H).attr('fill','url(#dotgrid)')
+    defs
+      .append('marker')
+      .attr('id', 'arrow')
+      .attr('viewBox', '0 0 8 8')
+      .attr('refX', 6)
+      .attr('refY', 4)
+      .attr('markerWidth', 6)
+      .attr('markerHeight', 6)
+      .attr('orient', 'auto')
+      .append('path')
+      .attr('d', 'M0,0 L0,8 L8,4 z')
+      .attr('fill', 'rgba(255,107,26,0.35)')
 
-    // Zoom
-    const zoom = d3.zoom().scaleExtent([0.4,2.5]).on('zoom',e=>{ g.attr('transform',e.transform) })
+    svg.append('rect').attr('width', width).attr('height', height).attr('fill', 'url(#dotgrid)')
+
+    const content = svg.append('g')
+    const initialTransform = d3.zoomIdentity.translate(80, 60)
+    const zoom = d3.zoom().scaleExtent([0.4, 2.5]).on('zoom', (event) => content.attr('transform', event.transform))
     svg.call(zoom)
-    zoomRef.current = { svg, zoom, W, H }
+    svg.call(zoom.transform, initialTransform)
+    zoomRef.current = { svg, zoom, initialTransform }
 
-    const g = svg.append('g').attr('transform',`translate(80,${H/2})`)
-    gRef.current = g
+    content
+      .selectAll('path.link')
+      .data(root.links())
+      .enter()
+      .append('path')
+      .attr('fill', 'none')
+      .attr('stroke', (link) => {
+        const type = getDisplayLabel(link.target.data.authenticity_label)
+        return type === 'Infringing' ? 'rgba(255,59,92,0.28)' : 'rgba(255,107,26,0.22)'
+      })
+      .attr('stroke-width', (link) => Math.max(1.5, score(link.target.data.similarity_score) / 28))
+      .attr('stroke-dasharray', (link) => (getDisplayLabel(link.target.data.authenticity_label) === 'Infringing' ? '6,4' : 'none'))
+      .attr('marker-end', 'url(#arrow)')
+      .attr(
+        'd',
+        d3
+          .linkHorizontal()
+          .x((point) => point.y)
+          .y((point) => point.x),
+      )
 
-    const root = d3.hierarchy(MOCK_TREE)
-    const tree = d3.tree().size([H-120,W-300])
-    tree(root)
+    const nodeGroups = content
+      .selectAll('g.node')
+      .data(root.descendants())
+      .enter()
+      .append('g')
+      .attr('transform', (node) => `translate(${node.y},${node.x})`)
+      .style('cursor', 'pointer')
+      .on('click', (event, node) => {
+        event.stopPropagation()
+        setSelectedNodeId(node.data.id)
+      })
 
-    // Links
-    root.links().forEach((link,i)=>{
-      const isInfring = link.target.data.type==='Infringing'
-      const path = g.append('path')
-        .attr('fill','none')
-        .attr('stroke', isInfring?'rgba(255,59,92,0.25)':'rgba(255,107,26,0.2)')
-        .attr('stroke-width', Math.max(1.5,(link.target.data.similarity/100)*4))
-        .attr('stroke-dasharray',isInfring?'6,4':'none')
-        .attr('marker-end','url(#arrow)')
-        .attr('d', d3.linkHorizontal().x(d=>d.y).y(d=>d.x))
-        .style('opacity',0)
+    nodeGroups.each(function drawNode(node) {
+      const type = getDisplayLabel(node.data.authenticity_label)
+      const colors = NODE_COLORS[type] || NODE_COLORS.Modified
+      const group = d3.select(this)
+      const radius = type === 'Original' ? 18 : type === 'Infringing' ? 15 : 13
 
-      // Edge label (mutation type)
-      const mid = { x:(link.source.x+link.target.x)/2, y:(link.source.y+link.target.y)/2 }
-      const edgeLbl = g.append('text')
-        .attr('x',mid.y).attr('y',mid.x-6)
-        .attr('text-anchor','middle')
-        .attr('font-family','JetBrains Mono,monospace').attr('font-size',9)
-        .attr('fill','rgba(255,107,26,0.5)')
-        .text(link.target.data.transformation.split(' ')[0])
-        .style('opacity',0)
+      group
+        .append('circle')
+        .attr('r', type === 'Original' ? 28 : 22)
+        .attr('fill', colors.fill)
+        .attr('opacity', 0.12)
+        .attr('filter', `url(#glow-${type})`)
 
-      setTimeout(()=>{
-        path.transition().duration(500).style('opacity',1)
-        edgeLbl.transition().duration(500).delay(200).style('opacity',1)
-      }, i*280+100)
+      group
+        .append('circle')
+        .attr('r', radius)
+        .attr('fill', `url(#grad-${type})`)
+        .attr('stroke', colors.fill)
+        .attr('stroke-width', 2)
+        .attr('filter', `url(#glow-${type})`)
+
+      if (node.depth > 0) {
+        const arcRadius = radius + 8
+        group
+          .append('path')
+          .attr(
+            'd',
+            d3
+              .arc()
+              .innerRadius(arcRadius)
+              .outerRadius(arcRadius + 3)
+              .startAngle(-Math.PI / 2)
+              .endAngle(-Math.PI / 2 + (score(node.data.similarity_score) / 100) * 2 * Math.PI),
+          )
+          .attr('fill', colors.fill)
+          .attr('opacity', 0.45)
+      }
+
+      group
+        .append('text')
+        .attr('y', -(radius + 14))
+        .attr('text-anchor', 'middle')
+        .attr('font-family', 'Outfit, sans-serif')
+        .attr('font-size', 12)
+        .attr('font-weight', 600)
+        .attr('fill', '#F0F0F0')
+        .text(node.data.id === 'node-0' ? 'Original' : shortLabel(node.data.filename || node.data.image_id))
+
+      group
+        .append('text')
+        .attr('y', radius + 15)
+        .attr('text-anchor', 'middle')
+        .attr('font-family', 'JetBrains Mono, monospace')
+        .attr('font-size', 10)
+        .attr('fill', colors.fill)
+        .text(node.depth === 0 ? '100%' : `${score(node.data.similarity_score)}%`)
+
+      if (type === 'Infringing') {
+        group.append('circle').attr('cx', 14).attr('cy', -14).attr('r', 8).attr('fill', '#FF3B5C').attr('stroke', '#111').attr('stroke-width', 2)
+        group.append('text').attr('x', 14).attr('y', -10).attr('text-anchor', 'middle').attr('font-size', 9).attr('font-weight', 700).attr('fill', '#fff').text('!')
+      }
     })
 
-    // Nodes
-    root.descendants().forEach((node,i)=>{
-      const c = NC[node.data.type]
-      const nodeG = g.append('g')
-        .attr('transform',`translate(${node.y},${node.x})`)
-        .style('opacity',0).style('cursor','pointer')
+    svg.on('click', () => setSelectedNodeId(null))
+  }, [hierarchy])
 
-      setTimeout(()=>{
-        nodeG.transition().duration(200).style('opacity',1)
+  const zoomIn = () => {
+    if (!zoomRef.current) {
+      return
+    }
+    zoomRef.current.svg.transition().duration(250).call(zoomRef.current.zoom.scaleBy, 1.25)
+  }
 
-        // Outer pulse ring (infringing only)
-        if (node.data.type==='Infringing') {
-          nodeG.append('circle').attr('r',0).attr('fill','none').attr('stroke',c.fill).attr('stroke-width',1.5).attr('opacity',0.3)
-            .transition().duration(700).ease(d3.easeBackOut).attr('r',32)
-          // pulse anim via repeated transitions
-          const pulse = (circ) => { circ.transition().duration(1200).attr('r',36).attr('opacity',0.1).transition().duration(1200).attr('r',28).attr('opacity',0.35).on('end',()=>pulse(circ)) }
-          pulse(nodeG.select('circle'))
-        }
+  const zoomOut = () => {
+    if (!zoomRef.current) {
+      return
+    }
+    zoomRef.current.svg.transition().duration(250).call(zoomRef.current.zoom.scaleBy, 0.8)
+  }
 
-        // Glow halo
-        nodeG.append('circle').attr('r',0).attr('fill',c.fill).attr('opacity',0.1)
-          .attr('filter',`url(#glow-${node.data.type})`)
-          .transition().duration(600).ease(d3.easeBackOut)
-          .attr('r', node.data.type==='Original'?30:node.data.type==='Infringing'?26:22)
+  const zoomFit = () => {
+    if (!zoomRef.current) {
+      return
+    }
+    zoomRef.current.svg.transition().duration(300).call(zoomRef.current.zoom.transform, zoomRef.current.initialTransform)
+  }
 
-        // Main circle
-        const r = node.data.type==='Original'?18:node.data.type==='Infringing'?15:13
-        nodeG.append('circle').attr('r',0)
-          .attr('fill',`url(#grad-${node.data.type})`)
-          .attr('stroke',c.fill).attr('stroke-width',2)
-          .attr('filter',`url(#glow-${node.data.type})`)
-          .transition().duration(600).ease(d3.easeBackOut).attr('r',r)
+  if (!treeData || !nodes.length) {
+    return (
+      <div style={{ maxWidth: 840, margin: '0 auto', padding: '72px 28px', textAlign: 'center' }}>
+        <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 34, fontWeight: 800, color: '#fff', marginBottom: 12 }}>No Propagation Tree Loaded</div>
+        <p style={{ color: 'var(--text2)', fontSize: 15, lineHeight: 1.8, marginBottom: 26 }}>
+          Run the upload and analysis workflow first so the backend can return a propagation graph.
+        </p>
+        <button
+          onClick={() => navigate('upload')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '12px 20px',
+            background: 'var(--orange)',
+            color: '#111',
+            border: 'none',
+            borderRadius: 10,
+            fontSize: 14,
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          Open Upload Workflow
+        </button>
+      </div>
+    )
+  }
 
-        // Similarity arc (non-root)
-        if (node.depth>0) {
-          const arcR=r+8
-          nodeG.append('path')
-            .attr('d',d3.arc().innerRadius(arcR).outerRadius(arcR+3).startAngle(-Math.PI/2).endAngle(-Math.PI/2+(node.data.similarity/100)*2*Math.PI))
-            .attr('fill',c.fill).attr('opacity',0.45)
-        }
+  const selectedNodeView = selectedNode
+    ? {
+        ...selectedNode,
+        explanation: explanations[selectedNode.id] || '',
+      }
+    : null
 
-        // Platform label (above)
-        nodeG.append('text').attr('y',-(r+12)).attr('text-anchor','middle')
-          .attr('font-family','Outfit,sans-serif').attr('font-size',12).attr('font-weight',600).attr('fill','#F0F0F0')
-          .text(node.data.platform)
-
-        // Score label (below)
-        if (node.depth>0) {
-          nodeG.append('text').attr('y',r+15).attr('text-anchor','middle')
-            .attr('font-family','JetBrains Mono,monospace').attr('font-size',10).attr('fill',c.fill)
-            .text(node.data.similarity+'%')
-        }
-
-        // Alert badge
-        if (node.data.type==='Infringing') {
-          nodeG.append('circle').attr('cx',14).attr('cy',-14).attr('r',8).attr('fill','#FF3B5C').attr('stroke','#111').attr('stroke-width',2)
-          nodeG.append('text').attr('x',14).attr('y',-10).attr('text-anchor','middle').attr('font-size',9).attr('font-weight',700).attr('fill','#fff').text('!')
-        }
-
-        nodeG.on('click',e=>{ e.stopPropagation(); setSelected(node) })
-        nodeG.on('mouseenter',function(){ d3.select(this).select('circle:nth-child(2)').transition().duration(120).attr('stroke-width',4) })
-        nodeG.on('mouseleave',function(){ d3.select(this).select('circle:nth-child(2)').transition().duration(120).attr('stroke-width',2) })
-      }, i*260+200)
-    })
-
-    svg.on('click',()=>setSelected(null))
-    setTimeout(()=>setBuilt(true), root.descendants().length*260+700)
-  },[])
-
-  const zoomIn  = ()=>{ const {svg,zoom,W,H}=zoomRef.current; svg.transition().duration(300).call(zoom.scaleBy,1.3) }
-  const zoomOut = ()=>{ const {svg,zoom}=zoomRef.current; svg.transition().duration(300).call(zoom.scaleBy,0.77) }
-  const zoomFit = ()=>{ const {svg,zoom,W,H}=zoomRef.current; svg.transition().duration(400).call(zoom.transform,d3.zoomIdentity.translate(80,H/2)) }
+  const totalNodes = nodes.length
+  const totalInfringing = nodes.filter((node) => node.type === 'Infringing').length
+  const treeDepth = hierarchy ? hierarchy.height + 1 : 1
 
   return (
-    <div style={{ maxWidth:1280,margin:'0 auto',padding:'48px 28px' }}>
-      {/* Header */}
-      <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24,animation:'fadeUp 0.5s ease' }}>
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '48px 28px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>
-          <div style={{ fontFamily:'JetBrains Mono,monospace',fontSize:10,color:'var(--orange)',letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:8 }}>◈ GET /api/tree/{'{id}'}</div>
-          <h2 style={{ fontFamily:'Syne,sans-serif',fontSize:32,fontWeight:800,color:'#fff',letterSpacing:'-0.025em' }}>
-            Propagation <span style={{color:'var(--orange)'}}>Tree</span>
+          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: 'var(--orange)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>
+            LIVE PROPAGATION GRAPH
+          </div>
+          <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: 32, fontWeight: 800, color: '#fff' }}>
+            Propagation <span style={{ color: 'var(--orange)' }}>Tree</span>
           </h2>
-          <p style={{ color:'var(--text2)',marginTop:6,fontSize:14 }}>Click any node to inspect · Red nodes are DMCA-eligible · Drag to pan · Scroll to zoom</p>
+          <p style={{ color: 'var(--text2)', marginTop: 6, fontSize: 14 }}>
+            Click any node to inspect it. The graph is rendered from the backend tree response in real time.
+          </p>
         </div>
-        <div style={{ display:'flex',gap:10,alignItems:'center' }}>
-          {[['Original','var(--green)'],['Modified','var(--orange)'],['Infringing','var(--red)']].map(([l,c])=>(
-            <div key={l} style={{display:'flex',alignItems:'center',gap:6}}>
-              <div style={{width:9,height:9,borderRadius:'50%',background:c,boxShadow:`0 0 7px ${c}`}}/>
-              <span style={{fontFamily:'JetBrains Mono,monospace',fontSize:11,color:'var(--text2)'}}>{l}</span>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {['Original', 'Modified', 'Infringing'].map((label) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ width: 9, height: 9, borderRadius: '50%', background: NODE_COLORS[label].fill }} />
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: 'var(--text2)' }}>{label}</span>
             </div>
           ))}
-          <div style={{width:1,height:18,background:'var(--border)',margin:'0 4px'}}/>
-          {/* Zoom controls */}
-          <div style={{ display:'flex',gap:4 }}>
-            {[[ZoomIn,zoomIn],[ZoomOut,zoomOut],[Maximize2,zoomFit]].map(([Icon,fn],i)=>(
-              <button key={i} onClick={fn} style={{ width:32,height:32,background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',transition:'all 0.15s' }}
-                onMouseEnter={e=>e.currentTarget.style.borderColor='rgba(255,107,26,0.3)'}
-                onMouseLeave={e=>e.currentTarget.style.borderColor='var(--border)'}
+          <div style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 4px' }} />
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[
+              [ZoomIn, zoomIn],
+              [ZoomOut, zoomOut],
+              [Maximize2, zoomFit],
+            ].map(([Icon, action], index) => (
+              <button
+                key={index}
+                onClick={action}
+                style={{
+                  width: 32,
+                  height: 32,
+                  background: 'var(--bg3)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                }}
               >
-                <Icon size={13} color="var(--text2)"/>
+                <Icon size={13} color="var(--text2)" />
               </button>
             ))}
           </div>
-          <button onClick={()=>navigate('dashboard')} style={{
-            display:'flex',alignItems:'center',gap:7,padding:'9px 16px',
-            background:'rgba(255,107,26,0.08)',border:'1px solid rgba(255,107,26,0.2)',
-            borderRadius:10,fontSize:13,fontWeight:600,color:'var(--orange)',
-            cursor:'pointer',fontFamily:'Outfit,sans-serif',
-          }}>
-            <LayoutDashboard size={13}/> Dashboard
+          <button
+            onClick={() => navigate('dashboard')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 7,
+              padding: '9px 16px',
+              background: 'rgba(255,107,26,0.08)',
+              border: '1px solid rgba(255,107,26,0.2)',
+              borderRadius: 10,
+              fontSize: 13,
+              fontWeight: 600,
+              color: 'var(--orange)',
+              cursor: 'pointer',
+            }}
+          >
+            <LayoutDashboard size={13} /> Dashboard
           </button>
         </div>
       </div>
 
-      {/* Tree container */}
-      <div style={{
-        background:'#141414',border:'1px solid rgba(255,107,26,0.1)',
-        borderRadius:20,position:'relative',overflow:'hidden',
-        minHeight:600,animation:'fadeUp 0.5s 0.1s ease both',
-        boxShadow:'0 0 60px rgba(255,107,26,0.04)',
-      }}>
-        {!built && (
-          <div style={{
-            position:'absolute',top:18,left:'50%',transform:'translateX(-50%)',
-            background:'rgba(255,107,26,0.08)',border:'1px solid rgba(255,107,26,0.2)',
-            color:'var(--orange)',padding:'7px 18px',borderRadius:999,
-            fontFamily:'JetBrains Mono,monospace',fontSize:12,
-            display:'flex',alignItems:'center',gap:8,zIndex:5,
-            animation:'pulse 1.5s ease infinite',
-          }}>
-            <div style={{width:7,height:7,borderRadius:'50%',background:'var(--orange)',animation:'pulse 1s ease infinite'}}/>
-            Constructing genome tree...
-          </div>
-        )}
-        <svg ref={svgRef} style={{display:'block',width:'100%',position:'relative',zIndex:1}}/>
-        {selected && <NodeDetailPanel node={selected} onDMCA={setDmcaNode} onClose={()=>setSelected(null)}/>}
+      <div
+        style={{
+          background: '#141414',
+          border: '1px solid rgba(255,107,26,0.1)',
+          borderRadius: 20,
+          position: 'relative',
+          overflow: 'hidden',
+          minHeight: 600,
+          boxShadow: '0 0 60px rgba(255,107,26,0.04)',
+        }}
+      >
+        <svg ref={svgRef} style={{ display: 'block', width: '100%', position: 'relative', zIndex: 1 }} />
+        {selectedNodeView ? (
+          <NodeDetailPanel
+            node={selectedNodeView}
+            loadingExplanation={loadingExplanationId === selectedNodeView.id}
+            explanationError={explanationErrors[selectedNodeView.id]}
+            onDMCA={setDmcaNode}
+            onClose={() => setSelectedNodeId(null)}
+            onViewSource={() => {
+              if (selectedNodeView.url) {
+                window.open(selectedNodeView.url, '_blank', 'noopener,noreferrer')
+              }
+            }}
+          />
+        ) : null}
       </div>
 
-      {/* Bottom stats */}
-      {built && (
-        <div style={{marginTop:16,display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:14,animation:'fadeUp 0.4s ease'}}>
-          {[
-            {label:'Total Nodes',   val:'7',      icon:GitBranch,   color:'var(--orange)'},
-            {label:'Tree Depth',    val:'4 levels',icon:Shield,      color:'var(--orange)'},
-            {label:'Infringing',    val:'2 nodes', icon:AlertTriangle,color:'var(--red)'},
-            {label:'DMCA Ready',    val:'2 notices',icon:FileText,   color:'var(--red)'},
-          ].map(s=>(
-            <div key={s.label} style={{background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:14,padding:'16px 20px',display:'flex',gap:14,alignItems:'center'}}>
-              <div style={{width:36,height:36,flexShrink:0,background:`${s.color==='var(--red)'?'rgba(255,59,92,0.1)':'rgba(255,107,26,0.1)'}`,border:`1px solid ${s.color==='var(--red)'?'rgba(255,59,92,0.2)':'rgba(255,107,26,0.2)'}`,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                <s.icon size={15} color={s.color}/>
-              </div>
-              <div>
-                <div style={{fontFamily:'Syne,sans-serif',fontSize:18,fontWeight:800,color:'#fff'}}>{s.val}</div>
-                <div style={{fontFamily:'JetBrains Mono,monospace',fontSize:11,color:'var(--text3)'}}>{s.label}</div>
-              </div>
+      <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+        {[
+          { label: 'Total Nodes', value: totalNodes, icon: GitBranch, color: 'var(--orange)' },
+          { label: 'Tree Depth', value: `${treeDepth} levels`, icon: Shield, color: 'var(--orange)' },
+          { label: 'Infringing', value: `${totalInfringing} nodes`, icon: AlertTriangle, color: totalInfringing ? 'var(--red)' : 'var(--text2)' },
+          { label: 'DMCA Ready', value: `${totalInfringing} notices`, icon: FileText, color: totalInfringing ? 'var(--red)' : 'var(--text2)' },
+        ].map((stat) => (
+          <div key={stat.label} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 14, padding: '16px 20px', display: 'flex', gap: 14, alignItems: 'center' }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                flexShrink: 0,
+                background: stat.color === 'var(--red)' ? 'rgba(255,59,92,0.1)' : 'rgba(255,107,26,0.1)',
+                border: `1px solid ${stat.color === 'var(--red)' ? 'rgba(255,59,92,0.2)' : 'rgba(255,107,26,0.2)'}`,
+                borderRadius: 10,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <stat.icon size={15} color={stat.color} />
             </div>
-          ))}
-        </div>
-      )}
+            <div>
+              <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 18, fontWeight: 800, color: '#fff' }}>{stat.value}</div>
+              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: 'var(--text3)' }}>{stat.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
 
-      {dmcaNode && <DMCAModal nodeData={dmcaNode} onClose={()=>setDmcaNode(null)}/>}
+      {dmcaNode ? <DMCAModal rootImageId={imageId} nodeData={dmcaNode} onClose={() => setDmcaNode(null)} /> : null}
     </div>
   )
 }

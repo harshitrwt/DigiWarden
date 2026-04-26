@@ -1,0 +1,15 @@
+.git
+.gitignore
+.pytest_cache
+.pytest_tmp
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+backend/data/
+frontend/dist/
+frontend/node_modules/
+node_modules/
+
+tests/.pytest_tmp/

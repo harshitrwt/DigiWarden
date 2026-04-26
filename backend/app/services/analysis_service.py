@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..db import SessionLocal
 from ..models import AnalysisJobRow, ImageRow
-from ..settings import get_storage_path
+from ..settings import demo_variants_enabled, get_storage_path
 from .demo_mutations import generate_demo_variants
 from .storage_service import ensure_storage_dirs, save_bytes_to_uploads
 
@@ -37,6 +37,12 @@ def _load_image_row(db: Session, image_id: str) -> ImageRow:
 
 def _storage_abspath(storage_rel_path: str) -> str:
     return str(get_storage_path() / storage_rel_path)
+
+
+def _isoformat_or_none(value: Optional[datetime]) -> Optional[str]:
+    if value is None:
+        return None
+    return value.isoformat()
 
 
 def _classify_counts(matches: List[Dict[str, Any]]) -> Dict[str, int]:
@@ -104,20 +110,20 @@ def run_analysis_job(db: Session, job_id: str) -> None:
 
         def mutation_from_row(row: ImageRow) -> str:
             if is_demo(row):
-                # demo_crop.jpg -> Crop
                 name = Path(row.filename).stem
                 name = name[len("demo_") :] if name.lower().startswith("demo_") else name
                 return name.replace("_", " ").strip().title() or "Demo Variant"
             return "User Upload"
 
+        def source_kind_from_row(row: ImageRow) -> str:
+            return "demo" if is_demo(row) else "user_upload"
+
         stmt = select(ImageRow).where(ImageRow.variant_of == root.id).order_by(ImageRow.created_at.asc())
         variants = db.execute(stmt).scalars().all()
         user_variants = [v for v in variants if not is_demo(v)]
 
-        # If the user uploaded their own variants, analyze those.
-        # Otherwise, generate a small demo mutation set once per root image.
         candidates = user_variants if user_variants else variants
-        if not candidates:
+        if not candidates and demo_variants_enabled():
             demo_variants = generate_demo_variants(root_abs)
             for variant in demo_variants:
                 variant_image_id = str(uuid4())
@@ -140,11 +146,15 @@ def run_analysis_job(db: Session, job_id: str) -> None:
             candidate_abs = _storage_abspath(cand.storage_path)
             candidate_fp = extract_all_fingerprints(candidate_abs)
             sim = compute_similarity(root_fp, candidate_fp)
+            created_at = _isoformat_or_none(cand.created_at)
 
             matches.append(
                 {
                     "image_id": cand.id,
                     "url": f"/assets/{Path(cand.storage_path).name}",
+                    "filename": cand.filename,
+                    "created_at": created_at,
+                    "source_kind": source_kind_from_row(cand),
                     "mutation_type": mutation_from_row(cand),
                     "authenticity_label": sim.get("authenticity_label", "No Match"),
                     "similarity_score": float(sim.get("combined_score", 0.0)),
@@ -168,10 +178,13 @@ def run_analysis_job(db: Session, job_id: str) -> None:
             {
                 "image_id": m["image_id"],
                 "url": m["url"],
+                "filename": m.get("filename"),
+                "created_at": m.get("created_at"),
+                "breakdown": m.get("breakdown"),
+                "source_kind": m.get("source_kind"),
                 "authenticity_label": m["authenticity_label"],
                 "similarity_score": m["similarity_score"],
                 "mutation_type": m["mutation_type"],
-                "timestamp": _now_utc().isoformat(),
             }
             for m in matches
         ]
@@ -180,6 +193,9 @@ def run_analysis_job(db: Session, job_id: str) -> None:
             root_url=root_url,
             candidates=candidates_for_tree,
         )
+        tree_node_ids = {node.get("image_id"): node.get("id") for node in tree.get("nodes", [])}
+        for match in matches:
+            match["node_id"] = tree_node_ids.get(match["image_id"])
 
         job.status = "complete"
         job.finished_at = _now_utc()
