@@ -57,3 +57,15 @@ def get_cors_origins() -> list[str]:
 
 def demo_variants_enabled() -> bool:
     return _is_truthy(os.getenv("ENABLE_DEMO_VARIANTS"), default=False)
+
+
+def get_gemini_api_key() -> str | None:
+    return os.getenv("GEMINI_API_KEY") or None
+
+
+def get_google_cse_api_key() -> str | None:
+    return os.getenv("GOOGLE_CSE_API_KEY") or None
+
+
+def get_google_cse_id() -> str | None:
+    return os.getenv("GOOGLE_CSE_ID") or None

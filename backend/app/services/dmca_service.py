@@ -101,36 +101,51 @@ def generate_dmca_draft(
     semantic_score = breakdown.get("semantic_score")
     semantic_score_line = "N/A" if semantic_score is None else f"{semantic_score}%"
 
-    draft = (
-        "DMCA TAKEDOWN NOTICE\n"
-        f"Date: {_now_utc().date().isoformat()}\n"
-        f"To: {evidence_platform} Copyright Agent / Designated DMCA Contact\n"
-        "Subject: Notice of Copyright Infringement Under 17 U.S.C. 512(c)\n\n"
-        "1. Reporting party\n"
-        f"Name: {owner_name}\n"
-        f"Email: {owner_email}\n\n"
-        "2. Copyrighted work claimed to be infringed\n"
-        f"Root image ID: {job.image_id}\n"
-        f"Reference asset URL: {root_reference or '[internal asset record]'}\n"
-        f"Reference asset filename: {root_node.get('filename') if root_node else '[not available]'}\n\n"
-        "3. Infringing material to be removed or disabled\n"
-        f"Propagation node ID: {infringing_node_id}\n"
-        f"Source URL: {evidence_url}\n"
-        f"Source filename: {evidence_node.get('filename') or '[not available]'}\n"
-        f"Detected classification: {authenticity_label}\n"
-        f"Detected transformation: {mutation_type}\n"
-        f"Similarity score: {evidence_similarity}%\n"
-        f"pHash similarity: {breakdown.get('phash_score', 'N/A')}%\n"
-        f"ORB similarity: {breakdown.get('orb_score', 'N/A')}%\n"
-        f"Semantic similarity: {semantic_score_line}\n\n"
-        "4. Good-faith statement\n"
-        "I have a good-faith belief that the use of the material described above is not authorized by the copyright owner, its agent, or the law.\n\n"
-        "5. Accuracy and authority statement\n"
-        "I swear, under penalty of perjury, that the information in this notice is accurate and that I am the copyright owner or am authorized to act on behalf of the copyright owner.\n\n"
-        "6. Requested action\n"
-        "Please expeditiously remove or disable access to the infringing material identified above and preserve records sufficient to identify the responsible account holder.\n\n"
-        f"Electronic signature: {owner_name}\n"
-    )
+    try:
+        from .gemini_service import generate_dmca_text  # noqa: WPS433
+        draft = generate_dmca_text({
+            "owner_name": owner_name,
+            "owner_email": owner_email,
+            "registered_at": root_node.get("created_at") if root_node else "Unknown",
+            "source_url": getattr(evidence_node, "source_url", None) or evidence_url,
+            "similarity_score": evidence_similarity,
+            "phash_score": breakdown.get("phash_score", "N/A"),
+            "orb_score": breakdown.get("orb_score", "N/A"),
+            "mutation_type": mutation_type,
+        })
+    except Exception:  # noqa: BLE001
+        # Deterministic template fallback
+        draft = (
+            "DMCA TAKEDOWN NOTICE\n"
+            f"Date: {_now_utc().date().isoformat()}\n"
+            f"To: {evidence_platform} Copyright Agent / Designated DMCA Contact\n"
+            "Subject: Notice of Copyright Infringement Under 17 U.S.C. 512(c)\n\n"
+            "1. Reporting party\n"
+            f"Name: {owner_name}\n"
+            f"Email: {owner_email}\n\n"
+            "2. Copyrighted work claimed to be infringed\n"
+            f"Root image ID: {job.image_id}\n"
+            f"Reference asset URL: {root_reference or '[internal asset record]'}\n"
+            f"Reference asset filename: {root_node.get('filename') if root_node else '[not available]'}\n\n"
+            "3. Infringing material to be removed or disabled\n"
+            f"Propagation node ID: {infringing_node_id}\n"
+            f"Source URL: {evidence_url}\n"
+            f"Source filename: {evidence_node.get('filename') or '[not available]'}\n"
+            f"Detected classification: {authenticity_label}\n"
+            f"Detected transformation: {mutation_type}\n"
+            f"Similarity score: {evidence_similarity}%\n"
+            f"pHash similarity: {breakdown.get('phash_score', 'N/A')}%\n"
+            f"ORB similarity: {breakdown.get('orb_score', 'N/A')}%\n"
+            f"Semantic similarity: {semantic_score_line}\n\n"
+            "4. Good-faith statement\n"
+            "I have a good-faith belief that the use of the material described above is not authorized by the copyright owner, its agent, or the law.\n\n"
+            "5. Accuracy and authority statement\n"
+            "I swear, under penalty of perjury, that the information in this notice is accurate and that I am the copyright owner or am authorized to act on behalf of the copyright owner.\n\n"
+            "6. Requested action\n"
+            "Please expeditiously remove or disable access to the infringing material identified above and preserve records sufficient to identify the responsible account holder.\n\n"
+            f"Electronic signature: {owner_name}\n"
+        )
+
 
     dmca = DmcaDraftRow(
         id=str(uuid4()),

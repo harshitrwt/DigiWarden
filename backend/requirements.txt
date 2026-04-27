@@ -3,13 +3,19 @@ uvicorn
 sqlalchemy
 python-multipart
 pydantic
+python-dotenv
 
-# Engine + demo pipeline deps (so backend can import DigiPatron/engine)
-opencv-python-headless==4.9.0.80
-Pillow==10.3.0
-ImageHash==4.3.1
-numpy==1.26.4
-scipy==1.13.0
+# Engine + demo pipeline deps (so backend can import DigiWarden/engine)
+opencv-python-headless>=4.9
+Pillow>=10.0
+ImageHash>=4.3.1
+numpy>=1.26
+scipy>=1.11
 
 # Optional (only needed if you add `engine/mobilenet_v2.onnx` and want semantic embeddings):
 # onnxruntime>=1.17.0
+
+# Google AI & Search APIs (free-tier, for web scraping + Gemini explanations)
+google-genai>=1.0.0
+google-api-python-client>=2.100.0
+requests>=2.31.0

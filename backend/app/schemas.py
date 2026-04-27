@@ -10,6 +10,8 @@ class UploadResponseData(BaseModel):
     image_id: str
     filename: str
     upload_time: datetime
+    sha256_hash: Optional[str] = None
+    vault_status: str = "registered"
 
 
 class UploadResponse(BaseModel):

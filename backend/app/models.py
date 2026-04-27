@@ -19,6 +19,9 @@ class ImageRow(Base):
     size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     variant_of: Mapped[Optional[str]] = mapped_column(String, ForeignKey("images.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    sha256_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    phash: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    source_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
 
 class AnalysisJobRow(Base):
@@ -26,7 +29,7 @@ class AnalysisJobRow(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     image_id: Mapped[str] = mapped_column(String, ForeignKey("images.id"), index=True, nullable=False)
-    status: Mapped[str] = mapped_column(String, nullable=False)  # processing|complete|failed
+    status: Mapped[str] = mapped_column(String, nullable=False)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     error: Mapped[Optional[str]] = mapped_column(String, nullable=True)

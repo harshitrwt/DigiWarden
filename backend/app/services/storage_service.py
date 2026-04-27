@@ -53,7 +53,6 @@ def save_upload_to_disk(upload: UploadFile, image_id: str) -> Tuple[str, int]:
             size += len(chunk)
             f.write(chunk)
 
-    # storage_path is relative to storage root
     rel_path = str(Path("uploads") / filename_on_disk)
     return rel_path, size
 

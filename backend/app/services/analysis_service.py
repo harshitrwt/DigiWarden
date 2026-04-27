@@ -18,7 +18,6 @@ from .storage_service import ensure_storage_dirs, save_bytes_to_uploads
 
 
 def _ensure_project_root_on_path() -> None:
-    # backend/app/services -> backend/app -> backend -> DigiPatron (project root)
     project_root = Path(__file__).resolve().parents[3]
     if str(project_root) not in sys.path:
         sys.path.append(str(project_root))
@@ -48,7 +47,6 @@ def _isoformat_or_none(value: Optional[datetime]) -> Optional[str]:
 def _classify_counts(matches: List[Dict[str, Any]]) -> Dict[str, int]:
     modified = sum(1 for m in matches if m.get("authenticity_label") == "Modified")
     infringing = sum(1 for m in matches if m.get("authenticity_label") == "Likely Infringing")
-    # "total copies detected" excludes "No Match" results
     total = sum(1 for m in matches if m.get("authenticity_label") in {"Original", "Modified", "Likely Infringing"})
     return {"modified": modified, "infringing": infringing, "total": total}
 
@@ -77,14 +75,6 @@ def create_analysis_job(db: Session, image_id: str) -> AnalysisJobRow:
 
 
 def run_analysis_job(db: Session, job_id: str) -> None:
-    """
-    Runs the full MVP pipeline for an uploaded image:
-    - Fingerprint root
-    - Compare against variants (user uploads or demo-generated)
-    - Similarity scoring (engine)
-    - Propagation tree build (engine)
-    - Persist results for polling endpoints
-    """
     job = db.get(AnalysisJobRow, job_id)
     if not job:
         return
@@ -111,7 +101,7 @@ def run_analysis_job(db: Session, job_id: str) -> None:
         def mutation_from_row(row: ImageRow) -> str:
             if is_demo(row):
                 name = Path(row.filename).stem
-                name = name[len("demo_") :] if name.lower().startswith("demo_") else name
+                name = name[len("demo_"):] if name.lower().startswith("demo_") else name
                 return name.replace("_", " ").strip().title() or "Demo Variant"
             return "User Upload"
 
@@ -123,24 +113,35 @@ def run_analysis_job(db: Session, job_id: str) -> None:
         user_variants = [v for v in variants if not is_demo(v)]
 
         candidates = user_variants if user_variants else variants
-        if not candidates and demo_variants_enabled():
-            demo_variants = generate_demo_variants(root_abs)
-            for variant in demo_variants:
-                variant_image_id = str(uuid4())
-                storage_rel = save_bytes_to_uploads(variant.content, variant_image_id, suffix=variant.suffix)
-                variant_row = ImageRow(
-                    id=variant_image_id,
-                    filename=f"demo_{variant.mutation_type.lower()}{variant.suffix}",
-                    storage_path=storage_rel,
-                    content_type="image/png" if variant.suffix == ".png" else "image/jpeg",
-                    size_bytes=len(variant.content),
-                    variant_of=root.id,
-                    created_at=_now_utc(),
-                )
-                db.add(variant_row)
-            db.commit()
-            variants = db.execute(stmt).scalars().all()
-            candidates = variants
+        if not candidates:
+            try:
+                from .scraper_service import scrape_web_candidates  # noqa: WPS433
+                web_ids = scrape_web_candidates(db, root.id, root_abs)
+                if web_ids:
+                    variants = db.execute(stmt).scalars().all()
+                    candidates = list(variants)
+            except Exception as scrape_exc:  # noqa: BLE001
+                import logging
+                logging.getLogger(__name__).warning("Web scraping failed, continuing: %s", scrape_exc)
+
+            if not candidates and demo_variants_enabled():
+                demo_variants = generate_demo_variants(root_abs)
+                for variant in demo_variants:
+                    variant_image_id = str(uuid4())
+                    storage_rel = save_bytes_to_uploads(variant.content, variant_image_id, suffix=variant.suffix)
+                    variant_row = ImageRow(
+                        id=variant_image_id,
+                        filename=f"demo_{variant.mutation_type.lower()}{variant.suffix}",
+                        storage_path=storage_rel,
+                        content_type="image/png" if variant.suffix == ".png" else "image/jpeg",
+                        size_bytes=len(variant.content),
+                        variant_of=root.id,
+                        created_at=_now_utc(),
+                    )
+                    db.add(variant_row)
+                db.commit()
+                variants = db.execute(stmt).scalars().all()
+                candidates = variants
 
         for cand in candidates:
             candidate_abs = _storage_abspath(cand.storage_path)
@@ -173,7 +174,6 @@ def run_analysis_job(db: Session, job_id: str) -> None:
             "modified_copies": counts["modified"],
         }
 
-        # Build propagation DAG using the engine module.
         candidates_for_tree = [
             {
                 "image_id": m["image_id"],
@@ -204,7 +204,7 @@ def run_analysis_job(db: Session, job_id: str) -> None:
         job.matches_json = json.dumps({"root_image_id": root.id, "matches": matches})
         db.add(job)
         db.commit()
-    except Exception as e:  # noqa: BLE001 (MVP: we surface errors for easier debugging)
+    except Exception as e:  # noqa: BLE001
         job.status = "failed"
         job.finished_at = _now_utc()
         job.error = str(e)
@@ -213,9 +213,6 @@ def run_analysis_job(db: Session, job_id: str) -> None:
 
 
 def run_analysis_job_background(job_id: str) -> None:
-    """
-    Background-task safe wrapper: opens its own DB session.
-    """
     db = SessionLocal()
     try:
         run_analysis_job(db, job_id)

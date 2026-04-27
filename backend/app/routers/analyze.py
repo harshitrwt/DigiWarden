@@ -47,7 +47,6 @@ def get_fingerprint(image_id: str, db: Session = Depends(get_db)) -> Fingerprint
     if not image:
         raise HTTPException(status_code=404, detail="Image not found.")
 
-    # Make sure engine is importable when running from backend/ (MVP packaging shortcut).
     project_root = Path(__file__).resolve().parents[3]
     if str(project_root) not in sys.path:
         sys.path.append(str(project_root))

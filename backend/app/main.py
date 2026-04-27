@@ -15,7 +15,6 @@ from .settings import get_cors_origins, get_uploads_path
 
 
 def _ensure_project_root_on_path() -> None:
-    # backend/app/main.py -> backend/app -> backend -> DigiPatron
     project_root = Path(__file__).resolve().parents[2]
     if str(project_root) not in sys.path:
         sys.path.append(str(project_root))
@@ -53,11 +52,8 @@ def root():
     return {"status": "ok", "message": "ContentGenome backend is running", "docs": "/docs"}
 
 
-# Serve stored images under /assets/<filename>
 app.mount("/assets", StaticFiles(directory=str(get_uploads_path()), check_dir=False), name="assets")
 
-
-# API routes (contract lives in docs/API_CONTRACT.md)
 app.include_router(upload.router, prefix="/api", tags=["upload"])
 app.include_router(images.router, prefix="/api", tags=["images"])
 app.include_router(analyze.router, prefix="/api", tags=["analysis"])
