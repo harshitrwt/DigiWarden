@@ -13,3 +13,12 @@ __pycache__/
 # Backend runtime artifacts
 backend/data/
 *.db
+
+# Test artifacts
+.pytest_tmp/
+
+# Large model files (download separately)
+engine/mobilenet_v2.onnx
+
+# Local data storage
+data/

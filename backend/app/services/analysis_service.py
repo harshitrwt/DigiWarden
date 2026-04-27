@@ -45,15 +45,17 @@ def _isoformat_or_none(value: Optional[datetime]) -> Optional[str]:
 
 
 def _classify_counts(matches: List[Dict[str, Any]]) -> Dict[str, int]:
+    exact = sum(1 for m in matches if m.get("authenticity_label") == "Exact Copy")
     modified = sum(1 for m in matches if m.get("authenticity_label") == "Modified")
     infringing = sum(1 for m in matches if m.get("authenticity_label") == "Likely Infringing")
-    total = infringing + modified
-    return {"modified": modified, "infringing": infringing, "total": total}
+    total = exact + modified + infringing
+    return {"exact_copies": exact, "modified": modified, "infringing": infringing, "total": total}
 
 
-def _compute_integrity_score(modified: int, infringing: int) -> int:
-    score = 100 - (infringing * 20 + modified * 8)
+def _compute_integrity_score(exact_copies: int, modified: int, infringing: int) -> int:
+    score = 100 - (exact_copies * 25 + infringing * 20 + modified * 8)
     return max(0, int(score))
+
 
 
 def create_analysis_job(db: Session, image_id: str) -> AnalysisJobRow:
@@ -149,6 +151,10 @@ def run_analysis_job(db: Session, job_id: str) -> None:
             sim = compute_similarity(root_fp, candidate_fp)
             created_at = _isoformat_or_none(cand.created_at)
 
+            label = sim.get("authenticity_label", "No Match")
+            if label == "Original":
+                label = "Exact Copy"
+
             matches.append(
                 {
                     "image_id": cand.id,
@@ -157,20 +163,20 @@ def run_analysis_job(db: Session, job_id: str) -> None:
                     "created_at": created_at,
                     "source_kind": source_kind_from_row(cand),
                     "mutation_type": mutation_from_row(cand),
-                    "authenticity_label": sim.get("authenticity_label", "No Match"),
+                    "authenticity_label": label,
                     "similarity_score": float(sim.get("combined_score", 0.0)),
                     "breakdown": sim.get("breakdown", {}),
                 }
             )
 
         counts = _classify_counts(matches)
-        integrity = _compute_integrity_score(counts["modified"], counts["infringing"])
+        integrity = _compute_integrity_score(counts["exact_copies"], counts["modified"], counts["infringing"])
 
         result = {
             "image_id": root.id,
             "integrity_score": integrity,
             "total_copies_detected": counts["total"],
-            "infringing_copies": counts["infringing"],
+            "infringing_copies": counts["infringing"] + counts["exact_copies"],
             "modified_copies": counts["modified"],
         }
 

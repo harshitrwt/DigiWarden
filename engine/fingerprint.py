@@ -51,8 +51,8 @@ def generate_semantic_embedding(image_path: str) -> Optional[np.ndarray]:
         img = cv2.resize(img, (224, 224))
 
         img = img.astype(np.float32) / 255.0
-        mean = np.array([0.485, 0.456, 0.406])
-        std = np.array([0.229, 0.224, 0.225])
+        mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+        std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
         img = (img - mean) / std
 
         img = np.transpose(img, (2, 0, 1))
