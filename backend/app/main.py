@@ -31,7 +31,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(
-    title="ContentGenome v2 API (MVP)",
+    title="DigiWarden v2 API (MVP)",
     description="FastAPI backend for fingerprinting, similarity search, propagation trees, and DMCA drafting.",
     version="0.1.0",
     lifespan=lifespan,
@@ -49,7 +49,7 @@ app.add_middleware(
 
 @app.get("/")
 def root():
-    return {"status": "ok", "message": "ContentGenome backend is running", "docs": "/docs"}
+    return {"status": "ok", "message": "DigiWarden backend is running", "docs": "/docs"}
 
 
 app.mount("/assets", StaticFiles(directory=str(get_uploads_path()), check_dir=False), name="assets")

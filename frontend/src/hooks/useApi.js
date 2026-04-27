@@ -172,6 +172,12 @@ export function getDisplayLabel(label) {
   if (label === 'No Match') {
     return 'Unmatched'
   }
+  if (label === 'Original') {
+    return 'Original'
+  }
+  if (label === 'Modified') {
+    return 'Modified'
+  }
   return label || 'Unknown'
 }
 
@@ -180,7 +186,15 @@ export function formatRelativeTime(value) {
     return 'Just now'
   }
 
-  const date = new Date(value)
+  // Ensure the timestamp is treated as UTC if no timezone indicator is present.
+  // Backend stores datetimes in UTC but may serialize without the 'Z' suffix,
+  // causing the browser to parse them as local time and show a constant offset.
+  let raw = String(value)
+  if (!/[Zz]$/.test(raw) && !/[+-]\d{2}:\d{2}$/.test(raw)) {
+    raw += 'Z'
+  }
+
+  const date = new Date(raw)
   if (Number.isNaN(date.getTime())) {
     return 'Unknown time'
   }

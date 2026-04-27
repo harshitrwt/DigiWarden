@@ -78,12 +78,10 @@ def compute_similarity(fingerprint1: Dict[str, Any], fingerprint2: Dict[str, Any
     combined_score = (phash_score * w_phash) + (orb_score * w_orb) + (semantic_score * w_semantic)
     combined_score_100 = round(combined_score * 100.0, 2)
 
-    if combined_score_100 >= 90:
-        label = "Original"
-    elif combined_score_100 >= 65:
-        label = "Modified"
-    elif combined_score_100 >= 40:
+    if combined_score_100 >= 85:
         label = "Likely Infringing"
+    elif combined_score_100 >= 50:
+        label = "Modified"
     else:
         label = "No Match"
 

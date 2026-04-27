@@ -84,7 +84,9 @@ export default function TreePage({ workflow, navigate }) {
       return
     }
 
-    if (explanations[selectedNodeId] || loadingExplanationId === selectedNodeId || explanationErrors[selectedNodeId]) {
+    // Use 'in' operator instead of truthiness check — an empty-string explanation
+    // is a valid cached result and must not trigger a re-fetch.
+    if (selectedNodeId in explanations || loadingExplanationId === selectedNodeId || explanationErrors[selectedNodeId]) {
       return
     }
 
@@ -93,7 +95,8 @@ export default function TreePage({ workflow, navigate }) {
     fetchNodeExplanation(imageId, selectedNodeId)
       .then((explanation) => {
         if (!cancelled) {
-          setExplanations((current) => ({ ...current, [selectedNodeId]: explanation }))
+          // Store the result even if it's an empty string so we don't re-fetch.
+          setExplanations((current) => ({ ...current, [selectedNodeId]: explanation || 'No explanation available.' }))
           setExplanationErrors((current) => {
             const next = { ...current }
             delete next[selectedNodeId]

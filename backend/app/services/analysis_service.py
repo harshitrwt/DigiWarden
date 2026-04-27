@@ -47,12 +47,12 @@ def _isoformat_or_none(value: Optional[datetime]) -> Optional[str]:
 def _classify_counts(matches: List[Dict[str, Any]]) -> Dict[str, int]:
     modified = sum(1 for m in matches if m.get("authenticity_label") == "Modified")
     infringing = sum(1 for m in matches if m.get("authenticity_label") == "Likely Infringing")
-    total = sum(1 for m in matches if m.get("authenticity_label") in {"Original", "Modified", "Likely Infringing"})
+    total = infringing + modified
     return {"modified": modified, "infringing": infringing, "total": total}
 
 
 def _compute_integrity_score(modified: int, infringing: int) -> int:
-    score = 100 - (infringing * 15 + modified * 5)
+    score = 100 - (infringing * 20 + modified * 8)
     return max(0, int(score))
 
 

@@ -5,7 +5,6 @@ export default function Navbar({ page, navigate, hasAsset }) {
     { label: 'Features',     id: 'landing', section: 'features' },
     { label: 'How It Works', id: 'landing', section: 'how-it-works' },
     { label: 'Demo',         id: 'upload'  },
-    { label: 'Pricing',      id: 'landing', section: 'pricing' },
   ]
 
   return (
@@ -39,7 +38,7 @@ export default function Navbar({ page, navigate, hasAsset }) {
           </div>
           <div>
             <span style={{ fontWeight: 700, fontSize: 16, color: '#fff', letterSpacing: '-0.02em' }}>
-              Digi<span style={{ color: 'var(--orange)' }}>Patron</span>
+              Digi<span style={{ color: 'var(--orange)' }}>Warden</span>
             </span>
             <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: 'var(--text3)', marginLeft: 6 }}>v2</span>
           </div>
