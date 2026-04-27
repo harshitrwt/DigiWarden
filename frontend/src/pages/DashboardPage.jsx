@@ -24,7 +24,7 @@ function getTypeStyle(label) {
   if (label === 'Original') {
     return { color: 'var(--green)', background: 'rgba(34,197,94,0.1)' }
   }
-  if (label === 'Infringing') {
+  if (label === 'Infringing' || label === 'Exact Copy') {
     return { color: 'var(--red)', background: 'rgba(255,59,92,0.1)' }
   }
   if (label === 'Unmatched') {
@@ -126,7 +126,7 @@ export default function DashboardPage({ workflow, navigate }) {
     )
   }
 
-  const infringingRows = rows.filter((row) => row.label === 'Infringing')
+  const infringingRows = rows.filter((row) => row.label !== 'Unmatched' && row.label !== 'Original')
   const hasMatches = rows.length > 0
 
   return (
@@ -362,7 +362,7 @@ export default function DashboardPage({ workflow, navigate }) {
               </div>
               <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: 'var(--text3)' }}>{formatRelativeTime(row.createdAt)}</div>
               <div>
-                {row.label === 'Infringing' ? (
+                {(row.label !== 'Unmatched' && row.label !== 'Original') ? (
                   <button
                     onClick={() => setDmcaNode(row)}
                     style={{

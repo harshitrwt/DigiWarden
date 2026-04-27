@@ -198,7 +198,7 @@ export default function TreePage({ workflow, navigate }) {
         return type === 'Infringing' ? 'rgba(255,59,92,0.28)' : 'rgba(255,107,26,0.22)'
       })
       .attr('stroke-width', (link) => Math.max(1.5, score(link.target.data.similarity_score) / 28))
-      .attr('stroke-dasharray', (link) => (getDisplayLabel(link.target.data.authenticity_label) === 'Infringing' ? '6,4' : 'none'))
+      .attr('stroke-dasharray', (link) => (['Infringing', 'Exact Copy'].includes(getDisplayLabel(link.target.data.authenticity_label)) ? '6,4' : 'none'))
       .attr('marker-end', 'url(#arrow)')
       .attr(
         'd',
