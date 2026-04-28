@@ -26,7 +26,6 @@ DigiWarden is a **full-stack media forensics platform** that gives creators, pho
 - **Generate DMCA takedown notices** with forensic evidence pre-filled, in one click
 - **Protect images** with invisible steganographic watermarks for active defense
 
-Built for the **ContentGenome Hackathon** — zero cost, production-ready, fully demo-able.
 
 ---
 
@@ -288,7 +287,7 @@ pytest tests/ -v
 
 ## 🤝 Contributing
 
-This project was built for the **ContentGenome Hackathon**. PRs and feedback welcome!
+PRs and feedback welcome!
 
 1. Fork the repo
 2. Create a feature branch: `git checkout -b feat/your-feature`
@@ -304,6 +303,5 @@ MIT — see [LICENSE](LICENSE) for details.
 ---
 
 <div align="center">
-  <p>Built with ❤️ for the ContentGenome Hackathon</p>
   <p><strong>DigiWarden</strong> — Register once. Protect everywhere.</p>
 </div>
