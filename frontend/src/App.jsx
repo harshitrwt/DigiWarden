@@ -6,6 +6,9 @@ import LandingPage from './pages/LandingPage'
 import UploadPage from './pages/UploadPage'
 import DashboardPage from './pages/DashboardPage'
 import TreePage from './pages/TreePage'
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
+import VaultPage from './pages/VaultPage'
 
 const FOG = FOGMODULE.default ?? FOGMODULE
 const WORKFLOW_STORAGE_KEY = 'digiwarden.workflow'
@@ -106,6 +109,9 @@ export default function App() {
           {page === 'upload' && <UploadPage navigate={navigate} workflow={workflow} />}
           {page === 'dashboard' && <DashboardPage workflow={workflow} navigate={navigate} />}
           {page === 'tree' && <TreePage workflow={workflow} navigate={navigate} />}
+          {page === 'login' && <LoginPage navigate={navigate} />}
+          {page === 'register' && <RegisterPage navigate={navigate} />}
+          {page === 'vault' && <VaultPage navigate={navigate} />}
         </main>
       </div>
     </>

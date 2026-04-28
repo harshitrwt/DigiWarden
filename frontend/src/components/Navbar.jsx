@@ -1,6 +1,8 @@
 import { Shield } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function Navbar({ page, navigate, hasAsset }) {
+  const { isAuthenticated, logout } = useAuth()
   const links = [
     { label: 'Features',     id: 'landing', section: 'features' },
     { label: 'How It Works', id: 'landing', section: 'how-it-works' },
@@ -73,18 +75,43 @@ export default function Navbar({ page, navigate, hasAsset }) {
         </div>
 
         {/* CTA */}
-        <button onClick={() => navigate('upload')} style={{
-          padding: '8px 20px',
-          background: 'var(--orange)',
-          color: '#fff', border: 'none', borderRadius: 8,
-          fontSize: 14, fontWeight: 600, cursor: 'pointer',
-          fontFamily: 'Inter, sans-serif', transition: 'all 0.18s',
-        }}
-        onMouseEnter={e => { e.currentTarget.style.background = 'var(--orange2)'; e.currentTarget.style.transform = 'translateY(-1px)' }}
-        onMouseLeave={e => { e.currentTarget.style.background = 'var(--orange)'; e.currentTarget.style.transform = 'none' }}
-        >
-          Open Workflow
-        </button>
+        <div style={{ display: 'flex', gap: 12 }}>
+          {isAuthenticated ? (
+            <>
+              <button onClick={() => navigate('vault')} style={{
+                padding: '8px 20px', background: 'transparent',
+                color: 'var(--text2)', border: '1px solid var(--border)', borderRadius: 8,
+                fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'all 0.18s',
+              }}>
+                My Vault
+              </button>
+              <button onClick={() => navigate('upload')} style={{
+                padding: '8px 20px', background: 'var(--orange)',
+                color: '#fff', border: 'none', borderRadius: 8,
+                fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'all 0.18s',
+              }}>
+                Open Workflow
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => navigate('login')} style={{
+                padding: '8px 20px', background: 'transparent',
+                color: 'var(--text2)', border: '1px solid var(--border)', borderRadius: 8,
+                fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'all 0.18s',
+              }}>
+                Login
+              </button>
+              <button onClick={() => navigate('upload')} style={{
+                padding: '8px 20px', background: 'var(--orange)',
+                color: '#fff', border: 'none', borderRadius: 8,
+                fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'all 0.18s',
+              }}>
+                Open Workflow
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </nav>
   )

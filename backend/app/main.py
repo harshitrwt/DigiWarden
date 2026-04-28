@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .db import init_db
-from .routers import analyze, dmca, explain, images, tree, upload, variants
+from .routers import auth, analyze, dmca, explain, images, protect, tree, upload, users, variants
 from .services.storage_service import ensure_storage_dirs
 from .settings import get_cors_origins, get_uploads_path
 
@@ -61,3 +61,6 @@ app.include_router(tree.router, prefix="/api", tags=["tree"])
 app.include_router(dmca.router, prefix="/api", tags=["dmca"])
 app.include_router(explain.router, prefix="/api", tags=["explain"])
 app.include_router(variants.router, prefix="/api", tags=["variants"])
+app.include_router(auth.router, prefix="/api", tags=["auth"])
+app.include_router(users.router, prefix="/api", tags=["users"])
+app.include_router(protect.router, prefix="/api", tags=["protect"])

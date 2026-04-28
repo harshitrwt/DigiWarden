@@ -11,8 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import ImageRow
+from ..models import ImageRow, UserRow
 from ..schemas import UploadResponse
+from .auth import get_current_user_optional
 from ..services.storage_service import save_upload_to_disk
 from ..settings import get_storage_path
 
@@ -47,7 +48,7 @@ def _phash_similarity(h1: str, h2: str) -> float:
 
 
 @router.post("/upload", response_model=UploadResponse)
-async def upload_image(file: UploadFile = File(...), db: Session = Depends(get_db)) -> UploadResponse:
+async def upload_image(file: UploadFile = File(...), db: Session = Depends(get_db), user: UserRow = Depends(get_current_user_optional)) -> UploadResponse:
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image uploads are supported in this MVP.")
 
@@ -86,6 +87,7 @@ async def upload_image(file: UploadFile = File(...), db: Session = Depends(get_d
     now = datetime.now(timezone.utc)
     row = ImageRow(
         id=image_id,
+        user_id=user.id if user else None,
         filename=file.filename or "upload",
         storage_path=storage_rel,
         content_type=file.content_type,

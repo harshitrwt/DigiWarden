@@ -9,10 +9,20 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .db import Base
 
 
+class UserRow(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    email: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class ImageRow(Base):
     __tablename__ = "images"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
     filename: Mapped[str] = mapped_column(String, nullable=False)
     storage_path: Mapped[str] = mapped_column(String, nullable=False)
     content_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
