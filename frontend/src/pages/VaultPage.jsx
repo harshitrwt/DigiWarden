@@ -1,75 +1,130 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Shield, Lock, AlertTriangle, Fingerprint, Image as ImageIcon, ArrowRight } from 'lucide-react';
+import { Shield, AlertTriangle, Fingerprint, Image as ImageIcon, ArrowRight, Trash2, UserX } from 'lucide-react';
 
 export default function VaultPage({ navigate }) {
   const [vaultItems, setVaultItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   
   const { token, logout, email } = useAuth();
+
+  const fetchVault = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/users/me/vault', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.status === 401) {
+        logout();
+        navigate('login');
+        return;
+      }
+      
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Failed to fetch vault');
+      
+      setVaultItems(data.data.vault);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!token) {
       navigate('login');
       return;
     }
-
-    const fetchVault = async () => {
-      try {
-        const response = await fetch('http://localhost:8000/api/users/me/vault', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        
-        if (response.status === 401) {
-          logout();
-          navigate('login');
-          return;
-        }
-        
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || 'Failed to fetch vault');
-        
-        setVaultItems(data.data.vault);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
     fetchVault();
-  }, [token, navigate, logout]);
+  }, [token]);
+
+  const handleDeleteItem = async (imageId, filename) => {
+    if (!confirm(`Delete "${filename}" and all its analysis data? This cannot be undone.`)) return;
+    
+    setDeletingId(imageId);
+    try {
+      const res = await fetch(`http://localhost:8000/api/users/me/vault/${imageId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || 'Failed to delete');
+      }
+      setVaultItems(prev => prev.filter(item => item.image_id !== imageId));
+    } catch (err) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!confirm('PERMANENTLY delete your account and ALL your data? This cannot be undone!')) return;
+    
+    setDeletingAccount(true);
+    try {
+      const res = await fetch('http://localhost:8000/api/users/me/account', {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || 'Failed to delete account');
+      }
+      logout();
+      navigate('landing');
+    } catch (err) {
+      alert(`Error: ${err.message}`);
+      setDeletingAccount(false);
+    }
+  };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <div style={{
+        minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'var(--bg)',
+      }}>
+        <div style={{ width: 48, height: 48, border: '3px solid var(--border)', borderTopColor: 'var(--orange)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-200">
-      <nav className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-blue-500">
-            <Shield className="w-6 h-6" />
-            <span className="font-bold text-xl tracking-tight text-white">DigiWarden Vault</span>
+    <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)' }}>
+      <nav style={{
+        borderBottom: '1px solid var(--border)', background: 'rgba(10,10,10,0.5)',
+        backdropFilter: 'blur(20px)', position: 'sticky', top: 0, zIndex: 50
+      }}>
+        <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 24px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Shield size={24} color="var(--orange)" />
+            <span style={{ fontWeight: 800, fontSize: 20, letterSpacing: '-0.02em' }}>DigiWarden Vault</span>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-slate-400">{email}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+            <span style={{ fontSize: 14, color: 'var(--text2)' }}>{email}</span>
             <button 
               onClick={logout}
-              className="text-sm text-slate-400 hover:text-white transition-colors"
+              style={{ background: 'none', border: 'none', fontSize: 14, color: 'var(--text2)', cursor: 'pointer', transition: 'color 0.2s' }}
+              onMouseEnter={e => e.target.style.color = '#fff'}
+              onMouseLeave={e => e.target.style.color = 'var(--text2)'}
             >
               Sign out
             </button>
             <button 
               onClick={() => navigate('landing')}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              style={{
+                background: 'var(--orange)', color: '#fff', border: 'none', borderRadius: 8,
+                padding: '8px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => { e.target.style.background = 'var(--orange2)'; e.target.style.transform = 'translateY(-1px)' }}
+              onMouseLeave={e => { e.target.style.background = 'var(--orange)'; e.target.style.transform = 'none' }}
             >
               Register New Asset
             </button>
@@ -77,82 +132,135 @@ export default function VaultPage({ navigate }) {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-8">
+      <main style={{ maxWidth: 1280, margin: '0 auto', padding: '48px 24px' }}>
+        <div style={{ marginBottom: 40, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <h1 className="text-2xl font-bold text-white">Your Protected Assets</h1>
-            <p className="text-slate-400">Manage your intellectual property and track infringements.</p>
+            <h1 style={{ fontSize: 32, fontWeight: 800, marginBottom: 8, fontFamily: 'Syne, sans-serif' }}>Your Protected Assets</h1>
+            <p style={{ color: 'var(--text2)', fontSize: 16 }}>Manage your intellectual property and track infringements.</p>
           </div>
+          <button
+            onClick={() => setShowDeleteAccount(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, background: 'none',
+              border: '1px solid rgba(255,59,92,0.3)', borderRadius: 8, padding: '8px 14px',
+              fontSize: 13, color: 'var(--red)', cursor: 'pointer', transition: 'all 0.2s',
+              opacity: 0.7
+            }}
+            onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.borderColor = 'var(--red)' }}
+            onMouseLeave={e => { e.currentTarget.style.opacity = '0.7'; e.currentTarget.style.borderColor = 'rgba(255,59,92,0.3)' }}
+          >
+            <UserX size={14} /> Delete Account
+          </button>
         </div>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-lg mb-8">
+          <div style={{
+            background: 'var(--red-dim)', border: '1px solid rgba(255,59,92,0.2)',
+            color: 'var(--red)', padding: 16, borderRadius: 12, marginBottom: 32
+          }}>
             {error}
           </div>
         )}
 
         {vaultItems.length === 0 && !error ? (
-          <div className="text-center py-20 bg-slate-800/50 rounded-2xl border border-slate-700 border-dashed">
-            <ImageIcon className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-            <h3 className="text-xl font-medium text-white mb-2">Your vault is empty</h3>
-            <p className="text-slate-400 mb-6 max-w-md mx-auto">Upload and register your first image to begin tracking and protecting your intellectual property across the web.</p>
+          <div style={{
+            textAlign: 'center', padding: '80px 20px', background: 'var(--surface)',
+            borderRadius: 24, border: '1px dashed var(--border)',
+          }}>
+            <ImageIcon size={64} color="var(--text3)" style={{ margin: '0 auto 16px' }} />
+            <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>Your vault is empty</h3>
+            <p style={{ color: 'var(--text2)', marginBottom: 24, maxWidth: 400, margin: '0 auto 24px' }}>
+              Upload and register your first image to begin tracking and protecting your intellectual property across the web.
+            </p>
             <button 
               onClick={() => navigate('landing')}
-              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 8, background: 'var(--orange)',
+                color: '#fff', border: 'none', borderRadius: 12, padding: '12px 24px',
+                fontSize: 15, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s'
+              }}
             >
-              <Fingerprint className="w-5 h-5" />
-              Register an Asset
+              <Fingerprint size={20} /> Register an Asset
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 24
+          }}>
             {vaultItems.map((item) => (
-              <div key={item.image_id} className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden hover:border-slate-600 transition-colors group">
-                <div className="h-48 bg-slate-900 relative overflow-hidden">
+              <div key={item.image_id} style={{
+                background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 16,
+                overflow: 'hidden', transition: 'border-color 0.2s',
+              }}>
+                <div style={{ height: 180, background: 'var(--bg)', position: 'relative', overflow: 'hidden' }}>
                   <img 
-                    src={`http://localhost:8000/assets/${item.image_id}.jpg`}
+                    src={`http://localhost:8000${item.thumbnail_url}`}
                     alt={item.filename}
-                    className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }}
                     onError={(e) => { e.target.style.display = 'none'; }}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent"></div>
-                  <div className="absolute bottom-3 left-3 right-3 flex justify-between items-end">
-                    <span className="text-sm font-medium text-white truncate max-w-[70%]">{item.filename}</span>
-                    <span className="text-xs text-slate-400 bg-slate-900/80 px-2 py-1 rounded backdrop-blur-sm">
+                  <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '50%', background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)' }}></div>
+                  <div style={{ position: 'absolute', bottom: 12, left: 12, right: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                    <span style={{ fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '70%' }}>
+                      {item.filename}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--text2)', background: 'rgba(0,0,0,0.6)', padding: '4px 8px', borderRadius: 4, backdropFilter: 'blur(4px)' }}>
                       {new Date(item.created_at).toLocaleDateString()}
                     </span>
                   </div>
+                  {/* Delete button overlay */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteItem(item.image_id, item.filename); }}
+                    disabled={deletingId === item.image_id}
+                    style={{
+                      position: 'absolute', top: 10, right: 10,
+                      width: 32, height: 32, borderRadius: 8,
+                      background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
+                      border: '1px solid rgba(255,59,92,0.3)', color: 'var(--red)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: deletingId === item.image_id ? 'wait' : 'pointer',
+                      transition: 'all 0.2s', opacity: 0.7
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.background = 'rgba(255,59,92,0.2)' }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = '0.7'; e.currentTarget.style.background = 'rgba(0,0,0,0.6)' }}
+                    title="Delete this asset"
+                  >
+                    {deletingId === item.image_id 
+                      ? <div style={{ width: 14, height: 14, border: '2px solid var(--red)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }}></div>
+                      : <Trash2 size={14} />
+                    }
+                  </button>
                 </div>
                 
-                <div className="p-4 border-b border-slate-700 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center relative">
-                      <div className="absolute inset-0 border-2 border-green-500/20 rounded-full" style={{ clipPath: `polygon(0 0, 100% 0, 100% ${item.integrity_score}%, 0 ${item.integrity_score}%)` }}></div>
-                      <Shield className="w-5 h-5 text-slate-400 z-10" />
+                <div style={{ padding: 16, borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                      <div style={{ position: 'absolute', inset: 0, border: '2px solid var(--green-dim)', borderRadius: '50%', clipPath: `polygon(0 0, 100% 0, 100% ${item.integrity_score}%, 0 ${item.integrity_score}%)` }}></div>
+                      <Shield size={20} color="var(--text3)" style={{ zIndex: 1 }} />
                     </div>
                     <div>
-                      <div className="text-xs text-slate-400">Integrity Score</div>
-                      <div className="font-mono text-sm text-green-400">{item.integrity_score}%</div>
+                      <div style={{ fontSize: 12, color: 'var(--text2)' }}>Integrity Score</div>
+                      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 14, color: 'var(--green)' }}>{item.integrity_score}%</div>
                     </div>
                   </div>
                   
                   {item.infringing_copies > 0 && (
-                    <div className="flex items-center gap-1.5 text-red-400 bg-red-400/10 px-2 py-1 rounded text-xs font-medium border border-red-400/20">
-                      <AlertTriangle className="w-3.5 h-3.5" />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--red)', background: 'var(--red-dim)', padding: '4px 8px', borderRadius: 6, fontSize: 12, fontWeight: 500, border: '1px solid rgba(255,59,92,0.2)' }}>
+                      <AlertTriangle size={14} />
                       {item.infringing_copies} Infringements
                     </div>
                   )}
                 </div>
                 
-                <div className="p-4 bg-slate-800/50 flex justify-between items-center">
-                  <div className="text-xs text-slate-400">
+                <div style={{ padding: 16, background: 'var(--surface)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontSize: 12, color: 'var(--text2)' }}>
                     {item.total_copies} total copies found
                   </div>
                   <button 
                     onClick={() => navigate('dashboard', { analysis: { image_id: item.image_id } })}
-                    className="flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 font-medium transition-colors"
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: 'var(--orange)', fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer' }}
                   >
-                    View Analysis <ArrowRight className="w-4 h-4" />
+                    View Analysis <ArrowRight size={16} />
                   </button>
                 </div>
               </div>
@@ -160,6 +268,54 @@ export default function VaultPage({ navigate }) {
           </div>
         )}
       </main>
+
+      {/* Delete Account Confirmation Modal */}
+      {showDeleteAccount && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100
+        }} onClick={() => setShowDeleteAccount(false)}>
+          <div style={{
+            background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 20,
+            padding: 32, maxWidth: 420, width: '90%', textAlign: 'center'
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{
+              width: 56, height: 56, borderRadius: '50%', background: 'var(--red-dim)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px',
+              border: '1px solid rgba(255,59,92,0.3)'
+            }}>
+              <UserX size={28} color="var(--red)" />
+            </div>
+            <h3 style={{ fontSize: 22, fontWeight: 800, marginBottom: 10, fontFamily: 'Syne, sans-serif' }}>Delete Account?</h3>
+            <p style={{ color: 'var(--text2)', fontSize: 14, lineHeight: 1.7, marginBottom: 28 }}>
+              This will permanently delete your account, all your registered assets, analysis history, and DMCA drafts. This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={() => setShowDeleteAccount(false)}
+                style={{
+                  flex: 1, padding: '12px 20px', borderRadius: 10, border: '1px solid var(--border)',
+                  background: 'var(--surface)', color: 'var(--text)', fontSize: 14, fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deletingAccount}
+                style={{
+                  flex: 1, padding: '12px 20px', borderRadius: 10, border: 'none',
+                  background: 'var(--red)', color: '#fff', fontSize: 14, fontWeight: 600,
+                  cursor: deletingAccount ? 'wait' : 'pointer', opacity: deletingAccount ? 0.6 : 1
+                }}
+              >
+                {deletingAccount ? 'Deleting...' : 'Delete Forever'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

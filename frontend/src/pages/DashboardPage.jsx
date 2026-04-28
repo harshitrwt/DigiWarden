@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   ChevronRight,
@@ -8,13 +8,14 @@ import {
   Fingerprint,
   GitBranch,
   Image as ImageIcon,
+  Loader2,
   Search,
   Shield,
   TrendingUp,
 } from 'lucide-react'
 import SimilarityGauge from '../components/SimilarityGauge'
 import DMCAModal from '../components/DMCAModal'
-import { formatRelativeTime, getDisplayLabel } from '../hooks/useApi'
+import { formatRelativeTime, getDisplayLabel, fetchWorkflow } from '../hooks/useApi'
 import { useAuth } from '../contexts/AuthContext'
 
 function formatScore(value) {
@@ -62,8 +63,23 @@ function TypeBadge({ label }) {
 export default function DashboardPage({ workflow, navigate }) {
   const [dmcaNode, setDmcaNode] = useState(null)
   const [isProtecting, setIsProtecting] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [fetchError, setFetchError] = useState(null)
   
   const { token } = useAuth()
+
+  // Auto-fetch if we only got an image_id from Vault/Tree
+  useEffect(() => {
+    if (workflow?.analysis?.image_id && !workflow?.image && !isLoading && !fetchError) {
+      setIsLoading(true)
+      fetchWorkflow(workflow.analysis.image_id)
+        .then(fullWorkflow => {
+          navigate('dashboard', fullWorkflow)
+        })
+        .catch(err => setFetchError(err.message))
+        .finally(() => setIsLoading(false))
+    }
+  }, [workflow, isLoading, fetchError, navigate])
 
   const image = workflow?.image
   const analysis = workflow?.analysis
@@ -124,12 +140,21 @@ export default function DashboardPage({ workflow, navigate }) {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div style={{ maxWidth: 840, margin: '0 auto', padding: '72px 28px', textAlign: 'center', minHeight: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader2 size={48} color="var(--orange)" style={{ animation: 'spin 1s linear infinite', marginBottom: 24 }} />
+        <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 24, fontWeight: 800, color: '#fff' }}>Loading Analysis...</div>
+      </div>
+    )
+  }
+
   if (!analysis || !image) {
     return (
       <div style={{ maxWidth: 840, margin: '0 auto', padding: '72px 28px', textAlign: 'center' }}>
         <div style={{ fontFamily: 'Syne, sans-serif', fontSize: 34, fontWeight: 800, color: '#fff', marginBottom: 12 }}>No Analysis Loaded</div>
         <p style={{ color: 'var(--text2)', fontSize: 15, lineHeight: 1.8, marginBottom: 26 }}>
-          Upload an original asset and run the live analysis workflow before opening the dashboard.
+          {fetchError ? `Error: ${fetchError}` : "Upload an original asset and run the live analysis workflow before opening the dashboard."}
         </p>
         <button
           onClick={() => navigate('upload')}
@@ -171,7 +196,11 @@ export default function DashboardPage({ workflow, navigate }) {
               flexShrink: 0,
             }}
           >
-            <img src={image.url} alt={image.filename} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img 
+              src={`http://localhost:8000/assets/${analysis?.image_id || image?.image_id}${(image?.url?.match(/\.\w+$/) || ['.jpg'])[0]}`} 
+              alt={image.filename} 
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+            />
           </div>
           <div>
             <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: 'var(--orange)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>

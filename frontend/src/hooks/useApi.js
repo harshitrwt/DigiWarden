@@ -57,7 +57,17 @@ function getErrorMessage(response, payload, fallback) {
 }
 
 async function apiRequest(path, options = {}, config = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, options)
+  const token = localStorage.getItem('token')
+  const headers = new Headers(options.headers || {})
+  
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers
+  })
   const payload = await parseResponse(response)
   const allowStatusCodes = config.allowStatusCodes || []
 
@@ -145,14 +155,27 @@ async function waitForCompletion(imageId, onStatus) {
   throw new Error('Analysis timed out before the backend reported a completed result.')
 }
 
-async function fetchWorkflow(imageId) {
+export async function fetchWorkflow(imageId) {
+  // First check if analysis exists; if not, trigger it
+  const resultCheck = await apiRequest(`/analyze/${imageId}/result`, {}, { allowStatusCodes: [202, 404] })
+  
+  if (resultCheck.status === 404) {
+    // No analysis exists yet - trigger one and wait
+    await apiRequest(`/analyze/${imageId}`, { method: 'POST' }, { allowStatusCodes: [202] })
+    await waitForCompletion(imageId)
+  } else if (resultCheck.status === 202) {
+    // Analysis in progress - wait for it
+    await waitForCompletion(imageId)
+  }
+
+  // Now fetch everything
   const [imageResponse, resultResponse, similarityResponse, treeResponse, fingerprintResponse, variantsResponse] = await Promise.all([
     apiRequest(`/images/${imageId}`),
-    apiRequest(`/analyze/${imageId}/result`),
-    apiRequest(`/similarity/${imageId}`),
-    apiRequest(`/tree/${imageId}`),
-    apiRequest(`/fingerprint/${imageId}`),
-    apiRequest(`/images/${imageId}/variants?include_demo=true`),
+    apiRequest(`/analyze/${imageId}/result`, {}, { allowStatusCodes: [202] }),
+    apiRequest(`/similarity/${imageId}`, {}, { allowStatusCodes: [404] }),
+    apiRequest(`/tree/${imageId}`, {}, { allowStatusCodes: [404] }),
+    apiRequest(`/fingerprint/${imageId}`, {}, { allowStatusCodes: [404] }),
+    apiRequest(`/images/${imageId}/variants?include_demo=true`, {}, { allowStatusCodes: [404] }),
   ])
 
   return normalizeWorkflowPayload({
